@@ -25,8 +25,11 @@
   },
   "browser_specific_settings": {
     "gecko": {
-      "id": "force-color-scheme@zachmanson.local",
-      "strict_min_version": "85.0"
+      "id": "force-scheme@zachmanson.com",
+      "strict_min_version": "85.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
     }
   }
 }
