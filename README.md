@@ -7,6 +7,20 @@ theming is CSS-only (dark styles live inside `@media (prefers-color-scheme: …)
 blocks), which is exactly the case where the DevTools override is annoying to
 do by hand.
 
+## Toolbar toggle (3-state)
+
+The toolbar icon (half sun / half moon) cycles the **current domain**:
+
+| Click state | Effect | Badge |
+|-------------|--------|-------|
+| unset       | follows system (no override) | *(none)* |
+| off         | force **light**              | `L` |
+| on          | force **dark**               | `D` |
+
+Clicking again after `D` removes the domain from the list (back to system).
+The tab reloads automatically so the change applies immediately. Hover the
+icon to see the current state and what the next click does.
+
 ## What it does
 
 Two mechanisms, applied for each domain in your list:
@@ -47,8 +61,8 @@ news.example.net=dark  # force dark even though your system is light
 ```
 
 `example.com` also covers `www.example.com` and any subdomain. `system` (or
-removing the line) restores normal behaviour — the site follows your system
-setting.
+removing the line, or the toolbar toggle cycling back to unset) restores normal
+behaviour — the site follows your system setting.
 
 Changes apply on the next page load.
 
