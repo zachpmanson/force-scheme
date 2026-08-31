@@ -1,21 +1,30 @@
 // Force Color Scheme — content script
 //
-// Rewrites the page's own stylesheets so that the site's built-in light or
-// dark theme applies, regardless of the system scheme. Only touches media
-// rules that reference `prefers-color-scheme`; everything else is left alone.
+// Two mechanisms, applied when a domain is forced:
 //
-// Strategy per forced mode:
+// 1. Media-query rewrite: rewrite the page's own stylesheets so the site's
+//    built-in light or dark theme applies regardless of system scheme. Only
+//    touches media rules that reference `prefers-color-scheme`; everything
+//    else is left alone.
+// 2. color-scheme override: inject `:root { color-scheme: … !important }`,
+//    which flips the browser's default canvas/text/widget palette. This
+//    covers "color-scheme-only" sites (like danluu.com) that ship no media
+//    queries and rely on UA-default colours.
+//
+// Strategy per forced mode (both mechanisms):
 //   force light:
 //     - rules inside `(prefers-color-scheme: dark)`  -> never match (neutered)
 //     - rules inside `(prefers-color-scheme: light)` -> made unconditional
+//     - root color-scheme forced to `light`
 //   force dark:
 //     - rules inside `(prefers-color-scheme: light)` -> never match (neutered)
 //     - rules inside `(prefers-color-scheme: dark)`  -> made unconditional
+//     - root color-scheme forced to `dark`
 //
-// This works specifically because the target sites use CSS-only dark mode:
-// their light styles are the default and dark styles only exist inside the
-// media block, so neutering the block makes the site fall back to its own
-// light CSS. No re-styling happens anywhere.
+// This works because the target sites use CSS-only dark mode: their light
+// styles are the default and dark styles only exist inside a media block
+// (or come from UA-default colours under the page's color-scheme). No
+// re-styling happens anywhere.
 
 "use strict";
 
@@ -38,6 +47,7 @@ async function main() {
   currentWanted = mode === "light" || mode === "dark" ? mode : null;
   if (!currentWanted) return;
 
+  injectRootColorScheme(currentWanted);
   processAll();
 }
 
@@ -53,6 +63,20 @@ function matchMode(sites, host) {
     if (sites[domain]) return sites[domain];
   }
   return null;
+}
+
+// --- color-scheme override -------------------------------------------------
+
+// Sites like danluu.com ship no media queries at all — they declare
+// `color-scheme: light dark` (meta tag or CSS) and rely on the browser's
+// default palette for both schemes. Overriding the root colour-scheme is
+// what actually flips those defaults. Author !important always beats the
+// UA-origin meta tag and normal author declarations.
+function injectRootColorScheme(wanted) {
+  const style = document.createElement("style");
+  style.textContent = `:root { color-scheme: ${wanted} !important; }`;
+  style.dataset.forceScheme = "true";
+  document.documentElement.appendChild(style); // valid at document_start
 }
 
 // --- stylesheet processing -------------------------------------------------

@@ -9,16 +9,24 @@ do by hand.
 
 ## What it does
 
-For each domain in your list it rewrites the page's own stylesheets:
+Two mechanisms, applied for each domain in your list:
 
-| Forced mode   | `(prefers-color-scheme: dark)` blocks | `(prefers-color-scheme: light)` blocks |
-|---------------|---------------------------------------|-----------------------------------------|
-| `light`       | neutered (never match)                | made unconditional                       |
-| `dark`        | made unconditional                    | neutered (never match)                   |
+1. **Media-query rewrite** — rewrites the page's own stylesheets so its
+   built-in theme applies regardless of the system scheme:
 
-Other media conditions (width, height, …) inside those blocks are preserved.
-Blocks that list **both** schemes (a common Firefox-compat pattern) are left
-alone — they already apply in every mode.
+   | Forced mode   | `(prefers-color-scheme: dark)` blocks | `(prefers-color-scheme: light)` blocks |
+   |---------------|---------------------------------------|-----------------------------------------|
+   | `light`       | neutered (never match)                | made unconditional                       |
+   | `dark`        | made unconditional                    | neutered (never match)                   |
+
+   Other media conditions (width, height, …) inside those blocks are preserved.
+   Blocks that list **both** schemes (a common Firefox-compat pattern) are left
+   alone — they already apply in every mode.
+
+2. **`color-scheme` override** — injects `:root { color-scheme: … !important }`
+   on forced domains. This flips sites that declare `color-scheme: light dark`
+   but ship **no media queries** and rely on the browser's default
+   canvas/text palette — exactly danluu.com's approach.
 
 Also handles `<link media="(prefers-color-scheme: …)">` stylesheets, and watches
 for styles injected later by SPAs (MutationObserver).
