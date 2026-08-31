@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Force Color Scheme — Options</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+    }
+    body {
+      font: 14px/1.5 system-ui, sans-serif;
+      max-width: 640px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+    }
+    h1 {
+      font-size: 1.2rem;
+    }
+    textarea {
+      width: 100%;
+      height: 40vh;
+      font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+      white-space: pre;
+      overflow-x: auto;
+      box-sizing: border-box;
+      padding: 0.5rem;
+      border: 1px solid #888;
+      border-radius: 4px;
+      background: #fff;
+      color: #111;
+    }
+    @media (prefers-color-scheme: dark) {
+      textarea {
+        background: #1e1e1e;
+        color: #eee;
+        border-color: #555;
+      }
+    }
+    button {
+      font: inherit;
+      padding: 0.4rem 1rem;
+      margin-top: 0.75rem;
+      cursor: pointer;
+    }
+    #status {
+      margin-left: 0.75rem;
+      color: #2a7d2a;
+    }
+    code {
+      background: rgba(127, 127, 127, 0.15);
+      padding: 0 0.25em;
+      border-radius: 3px;
+    }
+    .muted {
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <h1>Force Color Scheme</h1>
+  <p class="muted">
+    One <code>domain=mode</code> per line. Mode is <code>light</code>, <code>dark</code>,
+    or <code>system</code> (no override — remove a line to go back to system).
+    <code>example.com</code> also covers its subdomains. Blank lines and lines
+    starting with <code>#</code> are ignored.
+  </p>
+  <textarea id="sites" spellcheck="false" placeholder="example.com=light&#10;news.example.net=dark"></textarea>
+  <div>
+    <button id="save">Save</button>
+    <span id="status"></span>
+  </div>
+  <p class="muted">
+    Changes apply on the next page load (reload open tabs to see them).
+  </p>
+  <script src="options.js"></script>
+</body>
+</html>
