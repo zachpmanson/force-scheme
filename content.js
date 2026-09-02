@@ -1,6 +1,6 @@
 // Force Color Scheme — content script
 //
-// Two mechanisms, applied when a domain is forced:
+// Three mechanisms, applied when a domain is forced:
 //
 // 1. Media-query rewrite: rewrite the page's own stylesheets so the site's
 //    built-in light or dark theme applies regardless of system scheme. Only
@@ -10,8 +10,14 @@
 //    which flips the browser's default canvas/text/widget palette. This
 //    covers "color-scheme-only" sites (like danluu.com) that ship no media
 //    queries and rely on UA-default colours.
+// 3. Theme-attribute neutralization: sites with a JS theme picker stamp an
+//    attribute on <html> (data-theme, data-color-mode, …) and gate their
+//    dark CSS behind it (e.g. `:root:not([data-theme="light"])`), which no
+//    media-query rewrite can touch. Assert the attribute to match the forced
+//    mode, delete the localStorage keys that drive it, and keep re-asserting
+//    when the site re-stamps it.
 //
-// Strategy per forced mode (both mechanisms):
+// Strategy per forced mode (mechanisms 1 and 2):
 //   force light:
 //     - rules inside `(prefers-color-scheme: dark)`  -> never match (neutered)
 //     - rules inside `(prefers-color-scheme: light)` -> made unconditional
@@ -29,6 +35,38 @@
 "use strict";
 
 const PCS = /\(\s*prefers-color-scheme\s*:\s*(dark|light|no-preference)\s*\)/i;
+
+// Attributes some sites stamp on <html> to record the active theme. Their
+// dark CSS is often gated behind one specific value (e.g. AMO's
+// `:root:not([data-theme="light"])`), so replacing a light-ish value is what
+// makes the site's own dark rules reachable again.
+const THEME_ATTRS = [
+  "data-theme",
+  "data-theme-mode",
+  "data-color-scheme",
+  "data-color-mode", // GitHub
+  "data-mode",
+  "data-bs-theme", // Bootstrap 5.3
+];
+
+// Attribute values that unambiguously mean "explicitly light" / "explicitly dark".
+const LIGHT_VALUES = new Set(["light", "light-mode", "light-theme", "auto", "system", "default"]);
+const DARK_VALUES = new Set(["dark", "dark-mode", "dark-theme", "night", "oled", "dim"]);
+
+// localStorage keys sites re-read on (re)load to re-stamp the attribute.
+// Deleted while a domain is forced, so the site's stored picker choice can't
+// win. Side effect: the forced site "forgets" its in-page theme picker
+// choice for as long as it is forced — that is the point.
+const THEME_STORAGE_KEYS = [
+  "theme",
+  "color-theme",
+  "color-scheme",
+  "colorScheme",
+  "themeColor",
+  "dark-mode",
+  "darkmode",
+  "preferredTheme",
+];
 
 let currentWanted = null; // "light" | "dark" | null (system behaviour)
 let observer = null;
@@ -48,6 +86,7 @@ async function main() {
   if (!currentWanted) return;
 
   injectRootColorScheme(currentWanted);
+  applyThemeAttributes(currentWanted);
   processAll();
 }
 
@@ -77,6 +116,55 @@ function injectRootColorScheme(wanted) {
   style.textContent = `:root { color-scheme: ${wanted} !important; }`;
   style.dataset.forceScheme = "true";
   document.documentElement.appendChild(style); // valid at document_start
+}
+
+// --- theme-attribute neutralization ----------------------------------------
+
+function applyThemeAttributes(wanted) {
+  const el = document.documentElement;
+
+  const assert = () => {
+    for (const name of THEME_ATTRS) {
+      const value = el.getAttribute(name);
+      if (value === null || value === "") {
+        // No picker state yet: activate the forced scheme so attribute-gated
+        // sites (GitHub, Bootstrap, docs themes) follow it too.
+        el.setAttribute(name, wanted);
+        continue;
+      }
+      const lower = value.trim().toLowerCase();
+      if (wanted === "dark" && LIGHT_VALUES.has(lower)) {
+        el.setAttribute(name, "dark");
+      } else if (wanted === "light" && DARK_VALUES.has(lower)) {
+        el.setAttribute(name, "light");
+      }
+      // Unrecognised values (brand themes like "purple") are left alone.
+    }
+    // Class-based theming (Tailwind / shadcn convention: <html class="dark">).
+    if (wanted === "dark") el.classList.add("dark");
+    else el.classList.remove("dark");
+  };
+
+  assert();
+  clearThemeStorage();
+
+  // Re-assert whenever the site's own script re-stamps the attribute
+  // (SPA navigation, storage-driven re-init, OS-change listeners).
+  // attributeFilter excludes "class", so our own mutations never re-trigger.
+  new MutationObserver(assert).observe(el, {
+    attributes: true,
+    attributeFilter: THEME_ATTRS,
+  });
+}
+
+function clearThemeStorage() {
+  for (const key of THEME_STORAGE_KEYS) {
+    try {
+      localStorage.removeItem(key);
+    } catch (e) {
+      // No localStorage (about:, sandboxed frames, data: URLs).
+    }
+  }
 }
 
 // --- stylesheet processing -------------------------------------------------
