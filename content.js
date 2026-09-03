@@ -58,6 +58,7 @@ const DARK_VALUES = new Set(["dark", "dark-mode", "dark-theme", "night", "oled",
 // win. Side effect: the forced site "forgets" its in-page theme picker
 // choice for as long as it is forced — that is the point.
 const THEME_STORAGE_KEYS = [
+  "amo_theme", // addons.mozilla.org (verified from its bundle, export `wN`)
   "theme",
   "color-theme",
   "color-scheme",
@@ -88,6 +89,10 @@ async function main() {
   injectRootColorScheme(currentWanted);
   applyThemeAttributes(currentWanted);
   processAll();
+  console.log(
+    `[force-scheme] v${browser.runtime.getManifest().version}: forcing ${currentWanted} on ${location.hostname} ` +
+      `(theme attr → ${document.documentElement.getAttribute("data-theme") || "none"})`
+  );
 }
 
 // --- settings lookup -------------------------------------------------------
@@ -135,8 +140,10 @@ function applyThemeAttributes(wanted) {
       const lower = value.trim().toLowerCase();
       if (wanted === "dark" && LIGHT_VALUES.has(lower)) {
         el.setAttribute(name, "dark");
+        console.log(`[force-scheme] flipped ${name}="${value}" → "dark" (${location.hostname})`);
       } else if (wanted === "light" && DARK_VALUES.has(lower)) {
         el.setAttribute(name, "light");
+        console.log(`[force-scheme] flipped ${name}="${value}" → "light" (${location.hostname})`);
       }
       // Unrecognised values (brand themes like "purple") are left alone.
     }
