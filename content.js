@@ -85,20 +85,41 @@ async function main() {
     document.addEventListener("DOMContentLoaded", startObserver, { once: true });
   }
 
-  const stored = await browser.storage.local.get("sites");
-  const mode = matchMode(stored.sites || {}, location.hostname);
-  currentWanted = mode === "light" || mode === "dark" ? mode : null;
-  if (!currentWanted) return;
+  // Always announce the script ran, whether or not it forces — so a silent
+  // page is never mistaken for a working force. domain: "none" means no
+  // override is active on this host (the usual reason for "nothing happens").
+  try {
+    const stored = await browser.storage.local.get("sites");
+    const mode = matchMode(stored.sites || {}, location.hostname);
+    currentWanted = mode === "light" || mode === "dark" ? mode : null;
 
-  injectRootColorScheme(currentWanted);
-  applyThemeAttributes(currentWanted);
-  processAll();
-  console.log(
-    `[force-scheme] v${browser.runtime.getManifest().version}: forcing ${currentWanted} on ${location.hostname}; ` +
-      `attr flips: ${DIAG.flipped.join(", ") || "none"}; ` +
-      `cleared storage: ${DIAG.storageCleared.join(", ") || "none"}; ` +
-      `media rules: ${DIAG.toAll}→unconditional, ${DIAG.neutered}→neutered`
-  );
+    if (!currentWanted) {
+      console.log(
+        `[force-scheme] v${browser.runtime.getManifest().version}: loaded on ${location.hostname}, ` +
+          `no override (domain: none) — click the toolbar to set light/dark for this site`
+      );
+      return;
+    }
+
+    // Shield the forcing path so an exception here can't suppress the report.
+    try {
+      injectRootColorScheme(currentWanted);
+      applyThemeAttributes(currentWanted);
+      processAll();
+    } catch (err) {
+      console.warn(`[force-scheme] error during apply: ${err && err.stack ? err.stack : err}`);
+    }
+
+    console.log(
+      `[force-scheme] v${browser.runtime.getManifest().version}: forcing ${currentWanted} on ${location.hostname}; ` +
+        `attr flips: ${DIAG.flipped.join(", ") || "none"}; ` +
+        `cleared storage: ${DIAG.storageCleared.join(", ") || "none"}; ` +
+        `media rules: ${DIAG.toAll}→unconditional, ${DIAG.neutered}→neutered`
+    );
+  } catch (err) {
+    // e.g. browser.storage unavailable in a sandboxed frame.
+    console.warn(`[force-scheme] main() failed: ${err && err.stack ? err.stack : err}`);
+  }
 }
 
 // --- settings lookup -------------------------------------------------------
