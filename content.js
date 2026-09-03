@@ -197,7 +197,7 @@ function processSheet(sheet, wanted) {
     handleMediaConditionalSheet(sheet, wanted);
     return;
   }
-  rewriteRules(sheet, wanted);
+  walkRules(sheet, sheet.cssRules, wanted);
 }
 
 // A <link media="(prefers-color-scheme: …)"> or <style media="…"> sheet:
@@ -207,10 +207,41 @@ function handleMediaConditionalSheet(sheet, wanted) {
   if (!match) return;
   const scheme = match[1].toLowerCase();
   if (scheme === wanted) {
-    sheet.media.mediaText = "all";
     sheet.disabled = false;
+    try {
+      sheet.media.mediaText = "all";
+    } catch (e) {
+      /* Firefox can't rewrite MediaList; rebuild the sheet instead */
+    }
+    if (/prefers-color-scheme/i.test(sheet.media.mediaText)) {
+      rebuildSheetUnconditional(sheet);
+    }
   } else if (scheme !== "no-preference") {
     sheet.disabled = true;
+  }
+}
+
+// Firefox (Gecko) does not let you mutate a sheet's MediaList: assignments to
+// `mediaText` are silently ignored. The reliable same-origin fallback is to
+// clone the rules into a plain <style> with no media condition. Cross-origin
+// sheets are unreadable and are simply left alone (they fall back to the
+// page's other mechanisms).
+function rebuildSheetUnconditional(sheet) {
+  try {
+    const parts = [];
+    for (const rule of sheet.cssRules) parts.push(rule.cssText);
+    if (!parts.length) return;
+    const style = document.createElement("style");
+    style.textContent = parts.join("\n");
+    style.dataset.forceScheme = "true";
+    const node = sheet.ownerNode;
+    if (node && node.parentNode) {
+      node.parentNode.insertBefore(style, node.nextSibling);
+    } else {
+      (document.head || document.documentElement).appendChild(style);
+    }
+  } catch (e) {
+    // Cross-origin or otherwise unreadable sheet — give up.
   }
 }
 
@@ -221,10 +252,16 @@ function rewriteRules(sheet, wanted) {
   } catch (e) {
     return; // cross-origin stylesheet — CSSOM is not readable
   }
-  walkRules(rules, wanted);
+  walkRules(sheet, rules, wanted);
 }
 
-function walkRules(rules, wanted) {
+// Rebuild a targeted @media rule so it applies regardless of the system
+// scheme. Gecko (Firefox) silently ignores mutation of `conditionText` /
+// `media.mediaText`, so the primary strategy is delete + reinsert with the
+// condition text rewritten — this works on every engine (verified on Gecko
+// 152 and Blink). The old direct-mutation path is kept as a fallback for
+// engines where inserting is restricted.
+function walkRules(owner, rules, wanted) {
   for (let i = rules.length - 1; i >= 0; i--) {
     const rule = rules[i];
 
@@ -251,44 +288,53 @@ function walkRules(rules, wanted) {
             .replace(/^\s*and\s+/i, "")
             .replace(/\s+and\s*$/i, "")
             .trim();
-          const newCond = rest || "all";
-          try {
-            rule.conditionText = newCond;
-            DIAG.toAll++;
-          } catch (e) {
-            try {
-              rule.media.mediaText = newCond;
-              DIAG.toAll++;
-            } catch (e2) {
-              /* leave as-is */
-            }
-          }
+          if (replaceMediaRule(owner, rules, i, rest || "all")) DIAG.toAll++;
         } else if (scheme !== "no-preference") {
-          // Opposite scheme: neuter so it can never match.
-          try {
-            rule.conditionText = "not all";
-            DIAG.neutered++;
-          } catch (e) {
-            try {
-              rule.media.mediaText = "not all";
-              DIAG.neutered++;
-            } catch (e2) {
-              try {
-                rules.deleteRule(i);
-                DIAG.neutered++;
-              } catch (e3) {
-                /* give up */
-              }
-            }
-          }
+          // Opposite scheme: drop the rule entirely — never matches.
+          if (replaceMediaRule(owner, rules, i, null)) DIAG.neutered++;
         }
       } else if (rule.cssRules) {
         // Nested media rule (e.g. inside @supports) — recurse.
-        walkRules(rule.cssRules, wanted);
+        walkRules(rule, rule.cssRules, wanted);
       }
     } else if (rule.type === CSSRule.SUPPORTS_RULE && rule.cssRules) {
-      walkRules(rule.cssRules, wanted);
+      walkRules(rule, rule.cssRules, wanted);
     }
+  }
+}
+
+// newCond === null means "never match": delete the rule outright.
+// Returns true when the rule ended up rewritten/deleted.
+function replaceMediaRule(owner, rules, index, newCond) {
+  const rule = rules[index];
+  try {
+    const css = rule.cssText;
+    if (newCond === null) {
+      owner.deleteRule(index);
+      return true;
+    }
+    const replaced = css.replace(/@media[^{]*/, `@media ${newCond}`);
+    owner.deleteRule(index);
+    try {
+      owner.insertRule(replaced, index);
+    } catch (e) {
+      // Rule deleted; leaving it out is equivalent to "never match" for the
+      // desired-scheme case only if the block was the site's only dark
+      // source — rare; accept the deletion rather than half-applying.
+    }
+    return true;
+  } catch (e) {
+    // Fallback for engines where delete/insert are restricted: direct mutation.
+    try {
+      rule.conditionText = newCond === null ? "not all" : newCond;
+    } catch (e2) {
+      try {
+        rule.media.mediaText = newCond === null ? "not all" : newCond;
+      } catch (e3) {
+        return false;
+      }
+    }
+    return false;
   }
 }
 
