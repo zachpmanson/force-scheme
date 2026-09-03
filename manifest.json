@@ -1,11 +1,16 @@
 {
   "manifest_version": 2,
   "name": "Force Color Scheme",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Per-domain override of prefers-color-scheme: force a site to use its built-in light or dark theme, ignoring your system setting.",
-  "permissions": ["storage", "tabs"],
+  "permissions": [
+    "storage",
+    "tabs"
+  ],
   "background": {
-    "scripts": ["background.js"]
+    "scripts": [
+      "background.js"
+    ]
   },
   "browser_action": {
     "default_title": "Force Color Scheme",
@@ -13,8 +18,12 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_start",
       "all_frames": true
     }
@@ -28,7 +37,9 @@
       "id": "force-scheme@zachmanson.com",
       "strict_min_version": "85.0",
       "data_collection_permissions": {
-        "required": ["none"]
+        "required": [
+          "none"
+        ]
       }
     }
   }

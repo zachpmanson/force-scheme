@@ -59,6 +59,7 @@ const DARK_VALUES = new Set(["dark", "dark-mode", "dark-theme", "night", "oled",
 // choice for as long as it is forced — that is the point.
 const THEME_STORAGE_KEYS = [
   "amo_theme", // addons.mozilla.org (verified from its bundle, export `wN`)
+  "color-mode", // GitHub (data-color-mode is its attr)
   "theme",
   "color-theme",
   "color-scheme",
@@ -68,6 +69,9 @@ const THEME_STORAGE_KEYS = [
   "darkmode",
   "preferredTheme",
 ];
+
+// Diagnostics summary, printed once per page load (see end of main()).
+const DIAG = { flipped: [], storageCleared: [], toAll: 0, neutered: 0, sheets: 0 };
 
 let currentWanted = null; // "light" | "dark" | null (system behaviour)
 let observer = null;
@@ -90,8 +94,10 @@ async function main() {
   applyThemeAttributes(currentWanted);
   processAll();
   console.log(
-    `[force-scheme] v${browser.runtime.getManifest().version}: forcing ${currentWanted} on ${location.hostname} ` +
-      `(theme attr → ${document.documentElement.getAttribute("data-theme") || "none"})`
+    `[force-scheme] v${browser.runtime.getManifest().version}: forcing ${currentWanted} on ${location.hostname}; ` +
+      `attr flips: ${DIAG.flipped.join(", ") || "none"}; ` +
+      `cleared storage: ${DIAG.storageCleared.join(", ") || "none"}; ` +
+      `media rules: ${DIAG.toAll}→unconditional, ${DIAG.neutered}→neutered`
   );
 }
 
@@ -140,9 +146,11 @@ function applyThemeAttributes(wanted) {
       const lower = value.trim().toLowerCase();
       if (wanted === "dark" && LIGHT_VALUES.has(lower)) {
         el.setAttribute(name, "dark");
+        DIAG.flipped.push(`${name}:"${value}"→"dark"`);
         console.log(`[force-scheme] flipped ${name}="${value}" → "dark" (${location.hostname})`);
       } else if (wanted === "light" && DARK_VALUES.has(lower)) {
         el.setAttribute(name, "light");
+        DIAG.flipped.push(`${name}:"${value}"→"light"`);
         console.log(`[force-scheme] flipped ${name}="${value}" → "light" (${location.hostname})`);
       }
       // Unrecognised values (brand themes like "purple") are left alone.
@@ -167,6 +175,7 @@ function applyThemeAttributes(wanted) {
 function clearThemeStorage() {
   for (const key of THEME_STORAGE_KEYS) {
     try {
+      if (localStorage.getItem(key) !== null) DIAG.storageCleared.push(key);
       localStorage.removeItem(key);
     } catch (e) {
       // No localStorage (about:, sandboxed frames, data: URLs).
@@ -245,9 +254,11 @@ function walkRules(rules, wanted) {
           const newCond = rest || "all";
           try {
             rule.conditionText = newCond;
+            DIAG.toAll++;
           } catch (e) {
             try {
               rule.media.mediaText = newCond;
+              DIAG.toAll++;
             } catch (e2) {
               /* leave as-is */
             }
@@ -256,12 +267,15 @@ function walkRules(rules, wanted) {
           // Opposite scheme: neuter so it can never match.
           try {
             rule.conditionText = "not all";
+            DIAG.neutered++;
           } catch (e) {
             try {
               rule.media.mediaText = "not all";
+              DIAG.neutered++;
             } catch (e2) {
               try {
                 rules.deleteRule(i);
+                DIAG.neutered++;
               } catch (e3) {
                 /* give up */
               }
