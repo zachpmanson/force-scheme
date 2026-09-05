@@ -65,6 +65,20 @@ Three mechanisms, applied for each domain in your list:
 Also handles `<link media="(prefers-color-scheme: …)">` stylesheets, and watches
 for styles injected later by SPAs (MutationObserver).
 
+## Frames (`about:blank` / `about:srcdoc`)
+
+Sites that render content in an iframe — e.g. feed readers that show an
+article in a sandboxed `srcdoc` frame — are covered too (`match_about_blank`
+runs the content script inside the frame). Two things make it work:
+
+- Embedded frames with an empty hostname fall back to the **parent's host**
+  for domain matching, so the same `example.com=light` entry drives both.
+- The frame's own theming only needs to be CSS-driven (media queries or a
+  theme attribute), which is exactly what the three mechanisms act on. Even
+  if the frame's sandbox blocked the injectable `color-scheme` style, the
+  parent's `:root` override propagates into `about:srcdoc` frames in
+  Firefox, so media-query theming follows the force either way.
+
 ## Install (personal use)
 
 1. Open `about:debugging` → **This Firefox** → **Load Temporary Add-on**
