@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Force Color Scheme",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Per-domain override of prefers-color-scheme: force a site to use its built-in light or dark theme, ignoring your system setting.",
   "permissions": [
     "storage",
@@ -25,7 +25,8 @@
         "content.js"
       ],
       "run_at": "document_start",
-      "all_frames": true
+      "all_frames": true,
+      "match_about_blank": true
     }
   ],
   "options_ui": {
