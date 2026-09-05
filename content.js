@@ -76,6 +76,22 @@ const DIAG = { flipped: [], storageCleared: [], toAll: 0, neutered: 0, sheets: 0
 let currentWanted = null; // "light" | "dark" | null (system behaviour)
 let observer = null;
 
+// Host to match against the sites list. about:srcdoc / about:blank frames
+// have an empty hostname; they are embedded by the parent page, so fall back
+// to the parent's host (same-origin srcdoc frames can read it; cross-origin
+// access throws and we leave the frame unforced).
+function frameHost() {
+  if (location.hostname) return location.hostname;
+  try {
+    if (window.parent && window.parent.location && window.parent.location.hostname) {
+      return window.parent.location.hostname;
+    }
+  } catch (e) {
+    /* cross-origin or unique-origin frame */
+  }
+  return null;
+}
+
 main();
 
 async function main() {
@@ -90,7 +106,7 @@ async function main() {
   // override is active on this host (the usual reason for "nothing happens").
   try {
     const stored = await browser.storage.local.get("sites");
-    const mode = matchMode(stored.sites || {}, location.hostname);
+    const mode = matchMode(stored.sites || {}, frameHost());
     currentWanted = mode === "light" || mode === "dark" ? mode : null;
 
     if (!currentWanted) {
@@ -109,6 +125,18 @@ async function main() {
     } catch (err) {
       console.warn(`[force-scheme] error during apply: ${err && err.stack ? err.stack : err}`);
     }
+
+    // At document_start the page's own <style>/<link> elements may not be
+    // parsed yet (especially in about:srcdoc frames, which parse after
+    // injection). One final pass once the DOM is ready catches anything the
+    // observer missed; the rewrites are idempotent for already-handled rules.
+    document.addEventListener(
+      "DOMContentLoaded",
+      () => {
+        if (currentWanted) processAll();
+      },
+      { once: true }
+    );
 
     console.log(
       `[force-scheme] v${browser.runtime.getManifest().version}: forcing ${currentWanted} on ${location.hostname}; ` +
